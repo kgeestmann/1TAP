@@ -1,12 +1,13 @@
 import os
+import asyncio
 import itertools
 
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
-from dotenv import load_dotenv
 
-load_dotenv()
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+from settings import settings
+from database.session import engine, run_migrations
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -26,7 +27,13 @@ class OneTapBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents, help_command=None)
 
     async def setup_hook(self):
-        # Load all module extensions (runs before the bot connects)
+        # Ensure the data directory exists, then apply migrations
+        data_dir = os.path.dirname(settings.database_path)
+        if data_dir:
+            os.makedirs(data_dir, exist_ok=True)
+        await asyncio.to_thread(run_migrations)  # alembic upgrade head (sync)
+
+        # Load all module extensions
         for filename in os.listdir("./modules"):
             if filename.endswith(".py") and not filename.startswith("__"):
                 extension = f"modules.{filename[:-3]}"
@@ -42,6 +49,10 @@ class OneTapBot(commands.Bot):
 
         # Start background presence rotation
         self.rotate_status.start()
+
+    async def close(self):
+        await engine.dispose()
+        await super().close()
 
     @tasks.loop(seconds=60)
     async def rotate_status(self):
@@ -61,20 +72,43 @@ async def on_ready():
     print(f"Bot is ready and serving {len(bot.guilds)} guild(s)")
 
 
-# Error handling for prefix commands
+# Error handling for prefix (!) commands
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         await ctx.send("Command not found. Use `!help` to see available commands.")
     elif isinstance(error, commands.MissingPermissions):
         await ctx.send("You don't have permission to use this command.")
+    elif isinstance(error, commands.NoPrivateMessage):
+        await ctx.send("This command can only be used in a server.")
+    elif isinstance(error, (commands.MissingRequiredArgument, commands.BadArgument)):
+        await ctx.send(f"Bad usage: {error}")
     else:
         print(f"An error occurred: {error}")
 
 
+# Error handling for slash (/) commands
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.MissingPermissions):
+        message = "You don't have permission to use this command."
+    elif isinstance(error, app_commands.NoPrivateMessage):
+        message = "This command can only be used in a server."
+    elif isinstance(error, app_commands.CheckFailure):
+        message = "You can't use this command here."
+    else:
+        message = "Something went wrong running that command."
+        print(f"App command error: {error}")
+
+    if interaction.response.is_done():
+        await interaction.followup.send(message, ephemeral=True)
+    else:
+        await interaction.response.send_message(message, ephemeral=True)
+
+
 # Run the bot
 if __name__ == "__main__":
-    if not TOKEN:
+    if not settings.discord_bot_token:
         print("Error: DISCORD_BOT_TOKEN environment variable not set!")
     else:
-        bot.run(TOKEN)
+        bot.run(settings.discord_bot_token)
