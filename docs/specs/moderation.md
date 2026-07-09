@@ -63,10 +63,32 @@ bot's **Moderate Members** permission.
 
 ### `role`
 
-Assigns the configured muted role (`member.add_roles`). Indefinite — cleared
-with `unmute`. The `duration` argument is ignored in this mode. Requires the
-muted role to be configured and below the bot's top role, and the bot's **Manage
-Roles** permission.
+Assigns the configured muted role (`member.add_roles`). Requires the muted role
+to be configured and below the bot's top role, and the bot's **Manage Roles**
+permission.
+
+- **Without `duration`:** indefinite — cleared manually with `unmute`.
+- **With `duration`:** the mute is recorded in the `active_mutes` table with an
+  expiry time, and a background task removes the role automatically when it
+  elapses (see *Auto-unmute* below).
+
+> The muted role only actually restricts a member if it has deny permission
+> overwrites in the channels. `/config setupmuterole` creates those; a role set
+> via `/config muterole` must already have them, or the mute is cosmetic.
+
+### Auto-unmute (timed role mutes)
+
+Timeout-mode mutes expire natively in Discord. Role-mode mutes with a duration
+are expired via the **[Scheduler](scheduler.md)**, not a poll loop:
+
+- On a timed role mute, moderation calls `scheduler.create_timer("unmute", …)`
+  with `{guild_id, user_id, role_id}`.
+- When it fires, the scheduler dispatches `on_unmute_timer_complete`; the
+  moderation cog's listener removes the role, logs the `unmute` (moderator = the
+  bot, reason "duration expired"), and posts to the mod-log channel.
+- Timers are DB-backed, so pending unmutes **survive a restart**.
+- `unmute` and re-muting a member both `cancel_timer(...)` first, so there is at
+  most one pending auto-unmute per member.
 
 ### Duration parsing
 
@@ -79,10 +101,28 @@ Roles** permission.
 removes the muted role if present. If the member is neither timed out nor holds
 the role, it reports that nothing was done.
 
+## Messages
+
+**No pings, ever.** Both the command reply and the mod-log use **usernames**, not
+mentions, and every send sets `allowed_mentions=none` as a safety net. Members
+are often not pingable in the log channel, and pinging on every action is noise.
+
+- **Command reply** — a compact line via `announce()`:
+  `ryan.tf was muted by tannies for 1m (reason: spam).`
+- **Mod-log channel** — a rich embed via `build_log_embed()`:
+  - title + colour per action (kick red, mute orange, unmute green),
+  - target avatar thumbnail,
+  - fields: Member (`username` + `id`), Moderator, Duration (if any), Reason,
+  - footer: `User ID: <id>` and a timestamp.
+
+Usernames are markdown-escaped (`user_label`) to avoid formatting injection.
+
 ## Audit trail
 
-Every successful action calls `repository.add_log(...)` (`kick` / `mute` /
-`unmute`) and, if a mod-log channel is configured, posts a summary line there.
+Every successful action calls `repository.add_log(...)`, which records the
+**action** (kick/mute/unmute), target, moderator, reason, and timestamp in the
+`actions` table. The reason is also written to Discord's server audit log. The
+row's id is an internal reference only — it is **not** shown in messages.
 
 ## Edge cases & error handling
 
@@ -105,5 +145,4 @@ predictable, and a uniform audit trail supports accountability.
 ## Future work
 
 - `ban` / `unban`, `warn` (+ `warnings` listing), and `purge`.
-- Auto-expiry for role-mode mutes (scheduled unmute) if role mode needs
-  time-limited mutes.
+- Optional DM to the target on mute/kick (with reason).

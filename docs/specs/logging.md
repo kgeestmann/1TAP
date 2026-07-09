@@ -43,10 +43,11 @@ Modules obtain a logger with `logging.getLogger(__name__)` (the entry point uses
 ### Format
 
 ```
-2026-07-09 16:05:24 INFO     onetap: Ready and serving 1 guild(s)
+2026-07-09 16:05:24 [INFO] Ready and serving 1 guild(s)
 ```
 
-`%(asctime)s %(levelname)-8s %(name)s: %(message)s`, dated `%Y-%m-%d %H:%M:%S`.
+`%(asctime)s [%(levelname)s] %(message)s`, dated `%Y-%m-%d %H:%M:%S`. Bracketed
+level, no logger name — compact and easy to scan.
 
 ### Rotation
 

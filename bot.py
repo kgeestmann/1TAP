@@ -10,6 +10,7 @@ from discord.ext import commands, tasks
 from settings import settings
 from logging_config import setup_logging
 from database.session import engine, run_migrations
+from database import repository
 
 logger = logging.getLogger("onetap")
 
@@ -31,21 +32,28 @@ class OneTapBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents, help_command=None)
 
     async def setup_hook(self):
+        logger.info("Starting up (database: %s)", settings.database_path)
+
         # Ensure the data directory exists, then apply migrations
         data_dir = os.path.dirname(settings.database_path)
         if data_dir:
             os.makedirs(data_dir, exist_ok=True)
+        logger.info("Applying database migrations…")
         await asyncio.to_thread(run_migrations)  # alembic upgrade head (sync)
+        logger.info("Database is up to date")
 
         # Load all module extensions
+        loaded = 0
         for filename in os.listdir("./modules"):
             if filename.endswith(".py") and not filename.startswith("__"):
                 extension = f"modules.{filename[:-3]}"
                 try:
                     await self.load_extension(extension)
+                    loaded += 1
                     logger.info("Loaded extension: %s", extension)
                 except Exception:
                     logger.exception("Failed to load extension %s", extension)
+        logger.info("Loaded %d extension(s)", loaded)
 
         # Register slash commands with Discord
         synced = await self.tree.sync()
@@ -74,6 +82,13 @@ bot = OneTapBot()
 async def on_ready():
     logger.info("%s connected to Discord", bot.user)
     logger.info("Ready and serving %d guild(s)", len(bot.guilds))
+
+
+@bot.event
+async def on_guild_remove(guild):
+    # Bot was removed from a guild — clean up its pending timers.
+    removed = await repository.delete_timers_by_guild(guild.id)
+    logger.info("Left guild %s (%s); removed %d pending timer(s)", guild.name, guild.id, removed)
 
 
 # Error handling for prefix (!) commands

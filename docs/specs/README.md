@@ -12,6 +12,7 @@ review, and evolve, and produce clean diffs.
 | [logging.md](logging.md) | Logging | Console + rotating file logging, levels, format. |
 | [database.md](database.md) | Persistence | SQLAlchemy models, sessions, Alembic migrations on SQLite. |
 | [configuration.md](configuration.md) | Configuration | Env settings (Pydantic) and per-guild `/config` commands. |
+| [scheduler.md](scheduler.md) | Scheduler | Persistent, precise timed jobs (auto-unmute, future temp-bans/reminders). |
 | [moderation.md](moderation.md) | Moderation | `kick`, `mute`, `unmute`, hierarchy rules, mute modes. |
 
 ## Conventions every spec follows

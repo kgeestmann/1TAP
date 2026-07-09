@@ -4,7 +4,7 @@ from logging.handlers import RotatingFileHandler
 
 from settings import settings
 
-_LOG_FORMAT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -39,3 +39,4 @@ def setup_logging() -> None:
     logging.getLogger("discord").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("aiosqlite").setLevel(logging.WARNING)
+    logging.getLogger("alembic").setLevel(logging.WARNING)  # we log migrations ourselves

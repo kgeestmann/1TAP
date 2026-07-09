@@ -92,6 +92,14 @@ Servers configure the bot at runtime through `/config` slash commands. Settings
 are stored per guild, so one deployment serves many servers with different
 behaviour.
 
+### Timed actions via a persistent scheduler
+Future actions (auto-unmute, later temp-bans/reminders) go through a single
+DB-backed scheduler cog that sleeps exactly until the next due timer and
+dispatches `on_<event>_timer_complete`. Precise, restart-safe, idle-cheap, and
+decoupled from handlers. See [specs/scheduler.md](specs/scheduler.md). This is
+the pattern larger bots use; only the cross-process "wake" mechanism (Postgres
+`LISTEN/NOTIFY` or Redis) would change at scale.
+
 ## Conventions
 
 - Every user-facing command is offered as both slash and prefix.

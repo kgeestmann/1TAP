@@ -1,3 +1,4 @@
+import logging
 from logging.config import fileConfig
 
 from alembic import context
@@ -11,7 +12,9 @@ config = context.config
 # Single source of truth for the DB location.
 config.set_main_option("sqlalchemy.url", settings.sync_database_url)
 
-if config.config_file_name is not None:
+# Only configure logging from alembic.ini when running standalone (CLI). When the
+# bot runs migrations it has already configured logging — don't clobber/disable it.
+if config.config_file_name is not None and not logging.getLogger().handlers:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

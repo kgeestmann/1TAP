@@ -24,6 +24,9 @@ vcs.xml
 profiles_settings.xml
 *.log
 
+# Data files
+data/
+
 # Logs
 logs/
 
@@ -41,3 +44,6 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Ignore Idea project files
+.idea/

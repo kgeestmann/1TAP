@@ -34,21 +34,43 @@ One row per guild. Absent row ⇒ defaults (see the repository).
 | `mute_mode` | String, not null | `timeout` or `role` (see `MuteMode`). |
 | `muted_role_id` | BigInteger, null | Role used in `role` mute mode. |
 
-### `mod_logs`
+### `actions`
 
-Append-only record of moderation actions.
+Append-only record of moderation actions. Indexed on `(guild_id, created_at)`
+(`ix_actions_guild_created`) for per-guild history queries.
 
 | Column | Type | Notes |
 | ------ | ---- | ----- |
 | `id` | Integer, PK autoincrement | |
-| `guild_id` | BigInteger, null | |
+| `guild_id` | BigInteger, **not null** | Indexed with `created_at`. |
 | `action` | String, not null | e.g. `kick`, `mute`, `unmute`. |
 | `user_id` / `user_name` | BigInteger / String, null | Target. |
 | `moderator_id` / `moderator_name` | BigInteger / String, null | Actor. |
 | `reason` | String, null | |
-| `timestamp` | DateTime, not null | UTC; defaulted in the model. |
+| `created_at` | UtcDateTime, not null | Aware UTC; defaulted in the model. |
+
+### `timers`
+
+Generic scheduled jobs (auto-unmute today; temp-ban expiry, reminders, … in
+future). Owned by the scheduler — see [scheduler.md](scheduler.md).
+
+| Column | Type | Notes |
+| ------ | ---- | ----- |
+| `id` | Integer, PK autoincrement | |
+| `event` | String, not null | Timer type; drives `on_<event>_timer_complete`. |
+| `guild_id` | BigInteger, null, indexed | Owning guild; enables per-guild cleanup. |
+| `expires_at` | UtcDateTime, not null, indexed | When it fires. |
+| `created_at` | UtcDateTime, not null | |
+| `payload` | JSON, not null | Handler data (e.g. `{guild_id, user_id, role_id}`). |
 
 Discord snowflake IDs use `BigInteger` (they exceed 32-bit).
+
+### Datetimes
+
+All datetime columns use a custom `UtcDateTime` type that stores naive UTC and
+returns **timezone-aware UTC**. SQLite otherwise returns naive datetimes, which
+cannot be compared with aware ones; normalising in the type keeps every datetime
+in the app aware-UTC and stays correct on Postgres.
 
 ## Data access (repository)
 
@@ -59,7 +81,16 @@ opens its own `async_session`, commits, and closes.
 | -------- | ------- | ----------- |
 | `get_config(guild_id)` | `GuildConfigModel` | Config for a guild, or a defaults object if none exists. |
 | `set_config(guild_id, **fields)` | `None` | Upsert one or more config fields. Keys are whitelisted. |
-| `add_log(guild_id, action, user, moderator, reason=None)` | `ModLog` | Insert a moderation-log row. |
+| `add_log(guild_id, action, user, moderator, reason=None)` | `int` | Record an action in `actions`; returns its row id. |
+| `create_timer(event, expires_at, payload, created_at, guild_id=None)` | `TimerModel` | Insert a scheduled timer. |
+| `get_next_timer(before)` | `TimerModel \| None` | Earliest timer due at/before `before`. |
+| `get_timers_by_event(event)` | `list[TimerModel]` | All timers of a given event type. |
+| `delete_timer(timer_id)` | `None` | Remove a timer. |
+| `delete_timers_by_guild(guild_id)` | `int` | Remove all timers for a guild; returns count. |
+
+**Multi-server hygiene:** the bot's `on_guild_remove` handler calls
+`delete_timers_by_guild` so pending jobs for a guild it was removed from don't
+linger. Guild config is retained so settings survive a re-invite.
 
 `get_config` returns a **Pydantic** `GuildConfigModel` (validated, typed, with
 enum `mute_mode` and sane defaults) rather than an ORM object or dict, so cogs
@@ -118,4 +149,4 @@ migrations later" true even on SQLite.
 ## Future work
 
 - Additional tables as features land (e.g. `warnings`).
-- Indexes on `mod_logs(guild_id, timestamp)` once query patterns exist.
+- Per-guild case numbers on `actions` (currently the global row id is internal).
