@@ -1,8 +1,9 @@
-import discord
-from discord.ext import commands
-from dotenv import load_dotenv
 import os
-import asyncio
+import itertools
+
+import discord
+from discord.ext import commands, tasks
+from dotenv import load_dotenv
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -11,36 +12,56 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
-
 # Rotating statuses
-statuses = [
+statuses = itertools.cycle([
     discord.Game("Monitoring chat"),
     discord.Game("Type !help for commands"),
     discord.Activity(type=discord.ActivityType.watching, name="over the server"),
-    discord.Activity(type=discord.ActivityType.listening, name="your commands")
-]
+    discord.Activity(type=discord.ActivityType.listening, name="your commands"),
+])
 
-async def change_status():
-    await bot.wait_until_ready()
-    while not bot.is_closed():
-        for status in statuses:
-            await bot.change_presence(status=discord.Status.online, activity=status)
-            await asyncio.sleep(10)
 
-bot.loop.create_task(change_status())
+class OneTapBot(commands.Bot):
+    def __init__(self):
+        super().__init__(command_prefix="!", intents=intents, help_command=None)
 
-# Load modules
-for filename in os.listdir("./modules"):
-    if filename.endswith(".py") and not filename.startswith("__"):
-        bot.load_extension(f"modules.{filename[:-3]}")
+    async def setup_hook(self):
+        # Load all module extensions (runs before the bot connects)
+        for filename in os.listdir("./modules"):
+            if filename.endswith(".py") and not filename.startswith("__"):
+                extension = f"modules.{filename[:-3]}"
+                try:
+                    await self.load_extension(extension)
+                    print(f"Loaded extension: {extension}")
+                except Exception as exc:
+                    print(f"Failed to load {extension}: {exc}")
+
+        # Register slash commands with Discord
+        synced = await self.tree.sync()
+        print(f"Synced {len(synced)} slash command(s)")
+
+        # Start background presence rotation
+        self.rotate_status.start()
+
+    @tasks.loop(seconds=60)
+    async def rotate_status(self):
+        await self.change_presence(status=discord.Status.online, activity=next(statuses))
+
+    @rotate_status.before_loop
+    async def before_rotate_status(self):
+        await self.wait_until_ready()
+
+
+bot = OneTapBot()
+
 
 @bot.event
 async def on_ready():
     print(f"{bot.user} has connected to Discord!")
     print(f"Bot is ready and serving {len(bot.guilds)} guild(s)")
 
-# Error handling
+
+# Error handling for prefix commands
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
@@ -49,6 +70,7 @@ async def on_command_error(ctx, error):
         await ctx.send("You don't have permission to use this command.")
     else:
         print(f"An error occurred: {error}")
+
 
 # Run the bot
 if __name__ == "__main__":

@@ -11,6 +11,9 @@ venv/
 # Environment variables
 .env
 
+# VS Code IDE files
+.vscode/
+
 # PyCharm / JetBrains IDE files
 .idea/
 *.iml

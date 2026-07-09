@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 LOG_FILE = "data/logs.json"
 
@@ -8,7 +8,7 @@ def log_action(action, user, moderator, reason=None):
     os.makedirs("data", exist_ok=True)
 
     log_entry = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "action": action,
         "user": str(user),
         "moderator": str(moderator),
