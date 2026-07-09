@@ -1,5 +1,6 @@
 import os
 import asyncio
+import logging
 import itertools
 
 import discord
@@ -7,7 +8,10 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from settings import settings
+from logging_config import setup_logging
 from database.session import engine, run_migrations
+
+logger = logging.getLogger("onetap")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -39,13 +43,13 @@ class OneTapBot(commands.Bot):
                 extension = f"modules.{filename[:-3]}"
                 try:
                     await self.load_extension(extension)
-                    print(f"Loaded extension: {extension}")
-                except Exception as exc:
-                    print(f"Failed to load {extension}: {exc}")
+                    logger.info("Loaded extension: %s", extension)
+                except Exception:
+                    logger.exception("Failed to load extension %s", extension)
 
         # Register slash commands with Discord
         synced = await self.tree.sync()
-        print(f"Synced {len(synced)} slash command(s)")
+        logger.info("Synced %d slash command(s)", len(synced))
 
         # Start background presence rotation
         self.rotate_status.start()
@@ -68,8 +72,8 @@ bot = OneTapBot()
 
 @bot.event
 async def on_ready():
-    print(f"{bot.user} has connected to Discord!")
-    print(f"Bot is ready and serving {len(bot.guilds)} guild(s)")
+    logger.info("%s connected to Discord", bot.user)
+    logger.info("Ready and serving %d guild(s)", len(bot.guilds))
 
 
 # Error handling for prefix (!) commands
@@ -84,7 +88,7 @@ async def on_command_error(ctx, error):
     elif isinstance(error, (commands.MissingRequiredArgument, commands.BadArgument)):
         await ctx.send(f"Bad usage: {error}")
     else:
-        print(f"An error occurred: {error}")
+        logger.error("Unhandled command error in %s", ctx.command, exc_info=error)
 
 
 # Error handling for slash (/) commands
@@ -98,7 +102,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         message = "You can't use this command here."
     else:
         message = "Something went wrong running that command."
-        print(f"App command error: {error}")
+        logger.error("Unhandled app command error", exc_info=error)
 
     if interaction.response.is_done():
         await interaction.followup.send(message, ephemeral=True)
@@ -108,7 +112,9 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 # Run the bot
 if __name__ == "__main__":
+    setup_logging()
     if not settings.discord_bot_token:
-        print("Error: DISCORD_BOT_TOKEN environment variable not set!")
+        logger.error("DISCORD_BOT_TOKEN is not set — aborting startup.")
     else:
-        bot.run(settings.discord_bot_token)
+        # log_handler=None: we own logging config, don't let discord.py add its own
+        bot.run(settings.discord_bot_token, log_handler=None)
