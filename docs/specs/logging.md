@@ -1,7 +1,7 @@
 # Logging
 
 - **Status:** Stable
-- **Last updated:** 2026-07-09
+- **Last updated:** 2026-11-20
 - **Code:** [`logging_config.py`](../../logging_config.py), configured in [`bot.py`](../../bot.py)
 
 ## Purpose
@@ -37,8 +37,9 @@ check and `bot.run`). It:
 `bot.run(..., log_handler=None)` tells discord.py **not** to install its own
 handler, so all logs flow through our root configuration.
 
-Modules obtain a logger with `logging.getLogger(__name__)` (the entry point uses
-`getLogger("onetap")`) and never call `print`.
+The entry point uses `getLogger("onetap")`; modules use a child logger named
+`onetap.<module>` (e.g. `getLogger("onetap.scheduler")`), so the whole bot sits
+under one `onetap` hierarchy. Nobody calls `print`.
 
 ### Format
 
