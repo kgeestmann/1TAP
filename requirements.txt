@@ -4,3 +4,7 @@ pydantic-settings>=2.0
 SQLAlchemy[asyncio]>=2.0
 aiosqlite>=0.19
 alembic>=1.13
+
+# Testing
+pytest>=9.0
+pytest-asyncio>=1.0

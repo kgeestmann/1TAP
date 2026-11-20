@@ -77,6 +77,7 @@ Full documentation lives in [`docs/`](docs/README.md). Start with the
 
 ## Development
 
+- **Run the tests:** `pytest` (installed via `requirements.txt`).
 - **Add a migration:** `alembic revision --autogenerate -m "describe change"`,
   then `alembic upgrade head` (or just restart the bot).
 - **Run against a scratch database:** set `DATABASE_PATH` to a temp file.
