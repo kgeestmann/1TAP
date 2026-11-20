@@ -64,7 +64,7 @@ bot.py               # entry point: bot subclass, events, error handlers
 settings.py          # Pydantic settings (env / .env)
 logging_config.py    # console + rotating-file logging setup
 database/            # SQLAlchemy models, Pydantic schemas, session, repository
-modules/             # command cogs (general, moderation, config)
+modules/             # cogs: general, moderation, config, scheduler (timed jobs)
 migrations/          # Alembic environment + versioned migrations
 docs/                # architecture overview and component specs
 ```

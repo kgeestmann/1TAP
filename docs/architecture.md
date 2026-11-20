@@ -15,11 +15,11 @@ From then on it reacts to gateway events (commands, presence updates).
                          │  • event + error handlers    │
                          └──────────────┬───────────────┘
                                         │ loads
-                     ┌──────────────────┼───────────────────┐
-                     ▼                  ▼                   ▼
-             modules/general    modules/moderation   modules/config
-                     │                  │                   │
-                     └──────────────────┴───────────────────┘
+            ┌──────────────────┬────────┴────────┬──────────────────┐
+            ▼                  ▼                 ▼                  ▼
+     modules/general  modules/moderation  modules/config    modules/scheduler
+            │                  │                 │                  │
+            └──────────────────┴────────┬────────┴──────────────────┘
                                         │ calls
                                         ▼
                             database/repository.py
@@ -35,6 +35,10 @@ From then on it reacts to gateway events (commands, presence updates).
               (SQLAlchemy ORM models)         schema owned by Alembic
 ```
 
+Cogs don't import each other. The one coupling is moderation → scheduler: moderation
+schedules timers through `bot.get_cog("Scheduler")`, and the scheduler calls back
+via the `on_<event>_timer_complete` event (see [specs/scheduler.md](specs/scheduler.md)).
+
 Cross-cutting concerns:
 
 - **[settings.py](../settings.py)** — a single Pydantic `Settings` object,
@@ -49,6 +53,7 @@ Cross-cutting concerns:
 | ----- | -------- | -------------- |
 | Entry point | `bot.py` | Process lifecycle, event wiring, global error handling. |
 | Commands (cogs) | `modules/` | Translate Discord interactions into actions; no direct DB/SQL. |
+| Scheduler (cog) | `modules/scheduler.py` | DB-backed timed jobs; fires `on_<event>_timer_complete` for other cogs to handle. |
 | Data access | `database/repository.py` | The **only** place cogs touch persistence. Returns typed models. |
 | Persistence | `database/{models,session}.py` | ORM models and the async engine/session. |
 | Schemas | `database/schemas.py` | Pydantic models the repository returns to cogs. |
@@ -105,5 +110,6 @@ the pattern larger bots use; only the cross-process "wake" mechanism (Postgres
 - Every user-facing command is offered as both slash and prefix.
 - All moderation actions pass role-hierarchy checks and handle Discord API
   errors explicitly (see [specs/moderation.md](specs/moderation.md)).
-- No `print` — use module loggers (`logging.getLogger(__name__)`).
+- No `print` — use module loggers named `onetap.<module>`
+  (`logging.getLogger("onetap.moderation")`).
 - Runtime artifacts (`data/`, `logs/`, `.env`, `.venv/`) are gitignored.
