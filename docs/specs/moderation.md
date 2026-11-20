@@ -1,7 +1,7 @@
 # Moderation
 
 - **Status:** Stable
-- **Last updated:** 2026-07-09
+- **Last updated:** 2026-11-20
 - **Code:** [`modules/moderation.py`](../../modules/moderation.py)
 
 ## Purpose
@@ -86,6 +86,12 @@ are expired via the **[Scheduler](scheduler.md)**, not a poll loop:
 - When it fires, the scheduler dispatches `on_unmute_timer_complete`; the
   moderation cog's listener removes the role, logs the `unmute` (moderator = the
   bot, reason "duration expired"), and posts to the mod-log channel.
+- If the member has left or no longer has the muted role, nothing is logged.
+- **If removing the role fails** (e.g. the role was moved above the bot's), the
+  listener schedules a retry timer `UNMUTE_RETRY_DELAY` (10 min) later, tracking
+  `attempt` in the payload. After `UNMUTE_MAX_ATTEMPTS` (3) it gives up and posts
+  an "Auto-unmute failed" embed to the mod-log asking for manual removal. A
+  failed unmute is never logged as successful.
 - Timers are DB-backed, so pending unmutes **survive a restart**.
 - `unmute` and re-muting a member both `cancel_timer(...)` first, so there is at
   most one pending auto-unmute per member.
