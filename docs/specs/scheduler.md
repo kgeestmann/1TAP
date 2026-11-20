@@ -1,7 +1,7 @@
 # Scheduler
 
 - **Status:** Stable
-- **Last updated:** 2026-07-09
+- **Last updated:** 2026-11-20
 - **Code:** [`modules/scheduler.py`](../../modules/scheduler.py), timers in [`database/`](../../database)
 
 ## Purpose
@@ -77,8 +77,12 @@ async def on_unmute_timer_complete(self, timer):
 - **Restart while a timer is pending:** re-read from DB on boot; nothing lost.
 - **Bot offline when a timer was due:** it fires on next startup (it is now
   past-due, so it runs immediately).
+- **At-most-once delivery:** the row is deleted *before* dispatch, so each timer
+  fires at most once. A crash in the instant between delete and the handler
+  finishing loses that firing; a failed handler is not re-run.
 - **Handler errors** are the handler's responsibility; a raising listener does
-  not stop the scheduler.
+  not stop the scheduler. A handler that needs a retry schedules a fresh timer
+  itself (see auto-unmute in [moderation.md](moderation.md)).
 - **Cancel of the in-flight timer** restarts the dispatch task so it re-selects.
 
 ## Scaling

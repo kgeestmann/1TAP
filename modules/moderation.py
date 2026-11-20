@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -8,17 +9,24 @@ from discord.ext import commands
 from database import repository
 from database.models import MuteMode
 
+logger = logging.getLogger("onetap.moderation")
+
 _DURATION_RE = re.compile(r"(\d+)\s*([smhd])", re.IGNORECASE)
 _UNIT_NAMES = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days"}
 MAX_TIMEOUT = timedelta(days=28)
 DEFAULT_TIMEOUT = timedelta(hours=1)
 UNMUTE_EVENT = "unmute"  # scheduler event name for timed role-mute expiry
+# The scheduler fires each timer at most once, so a failed auto-unmute is
+# retried by scheduling a fresh timer; after the last attempt a human is told.
+UNMUTE_MAX_ATTEMPTS = 3
+UNMUTE_RETRY_DELAY = timedelta(minutes=10)
 
 # (color, embed title) per action
 _ACTION_STYLE = {
     "kicked": (0xE74C3C, "Member kicked"),
     "muted": (0xE67E22, "Member muted"),
     "unmuted": (0x2ECC71, "Member unmuted"),
+    "unmute failed": (0x992D22, "Auto-unmute failed"),
 }
 NO_PING = discord.AllowedMentions.none()
 
@@ -45,6 +53,12 @@ def format_delta(delta: timedelta) -> str:
             qty, total = divmod(total, size)
             parts.append(f"{qty}{label}")
     return " ".join(parts) or "0s"
+
+
+def describe_unmute_failure(error: discord.HTTPException) -> str:
+    if isinstance(error, discord.Forbidden):
+        return "missing permissions — the muted role is above my top role or I lack Manage Roles"
+    return f"Discord API error ({error.status})"
 
 
 def audit_reason(moderator, reason) -> str:
@@ -230,17 +244,61 @@ class Moderation(commands.Cog):
         if guild is None:
             return
         member = guild.get_member(data["user_id"])
+        if member is None:
+            return  # left the server; Discord drops their roles anyway
         role = guild.get_role(data["role_id"])
-        if member and role and role in member.roles:
-            try:
-                await member.remove_roles(role, reason="Mute duration expired")
-            except discord.HTTPException:
-                pass
-        if member:
-            await repository.add_log(guild.id, "unmute", member, self.bot.user, "duration expired")
-            await self._log_to_channel(
-                guild, build_log_embed(member, self.bot.user, "unmuted", reason="duration expired")
+        if role is None or role not in member.roles:
+            logger.info("Auto-unmute for %s in guild %s: muted role already gone, nothing to do",
+                        member.id, guild.id)
+            return
+        try:
+            await member.remove_roles(role, reason="Mute duration expired")
+        except discord.NotFound:
+            logger.info("Auto-unmute for %s in guild %s: member or role no longer exists",
+                        member.id, guild.id)
+            return
+        except discord.HTTPException as error:
+            await self._handle_unmute_failure(guild, member, data, error)
+            return
+        await repository.add_log(guild.id, "unmute", member, self.bot.user, "duration expired")
+        await self._log_to_channel(
+            guild, build_log_embed(member, self.bot.user, "unmuted", reason="duration expired")
+        )
+
+    async def _handle_unmute_failure(self, guild, member, payload, error):
+        """Retry a failed auto-unmute later, or alert the mod-log once out of attempts."""
+        attempt = payload.get("attempt", 1)
+        cause = describe_unmute_failure(error)
+        if attempt < UNMUTE_MAX_ATTEMPTS and await self._schedule_unmute_retry(guild, member, payload, attempt):
+            logger.warning("Auto-unmute attempt %d/%d for %s in guild %s failed (%s); retrying in %s",
+                           attempt, UNMUTE_MAX_ATTEMPTS, member.id, guild.id, cause,
+                           format_delta(UNMUTE_RETRY_DELAY))
+            return
+        logger.error("Auto-unmute for %s in guild %s gave up after %d attempt(s): %s",
+                     member.id, guild.id, attempt, cause)
+        await self._log_to_channel(
+            guild, build_log_embed(member, self.bot.user, "unmute failed",
+                                   reason=f"{cause}. Remove the muted role manually.")
+        )
+
+    async def _schedule_unmute_retry(self, guild, member, payload, attempt) -> bool:
+        """Schedule the next auto-unmute attempt; False if it couldn't be scheduled."""
+        if not self.scheduler:
+            return False
+        try:
+            await self.scheduler.create_timer(
+                UNMUTE_EVENT,
+                datetime.now(timezone.utc) + UNMUTE_RETRY_DELAY,
+                {**payload, "attempt": attempt + 1},
+                guild_id=guild.id,
             )
+        except Exception:
+            # The original timer is already gone, so falling back to the
+            # mod-log alert is the only way left to surface this.
+            logger.exception("Could not schedule auto-unmute retry for %s in guild %s",
+                             member.id, guild.id)
+            return False
+        return True
 
     # ---- kick ----
     @commands.command(name="kick")
