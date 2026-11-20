@@ -51,9 +51,21 @@ If you find a bug, a gap or a docs/code mismatch outside the current task, **fil
 
 ## Git & PR workflow
 
-- Never commit directly to `master`. Work on a branch named `type/short-description` and use Conventional Commits.
-- Run `pytest` before opening a PR.
-- Each PR gets an automatic review from the `claude-code-review` workflow. For an on-demand review or a question, write `@claude` in a PR or issue comment. Act on valid findings, then merge with `gh pr merge <n> --merge --delete-branch`.
+Every change (feature, fix or docs) starts from a GitHub issue and gets its own branch and PR:
+
+1. **Issue:** use the existing one, or create it first with `gh issue create`. One issue = one branch = one PR.
+2. **Branch from the issue:**
+   ```bash
+   gh issue develop <n> --name <type>/<n>-short-description --base master --checkout
+   ```
+   This links the branch under the issue's *Development* section. `<type>` is the Conventional Commit type (`feat`, `fix`, `docs`, …). Never commit directly to `master`.
+3. **Commit** using Conventional Commits.
+4. **Before the PR:** run `pytest`.
+5. **PR:** put `Closes #<n>` in the description so the merge closes the issue and links it to the PR.
+6. **Review and merge:** the `claude-code-review` workflow reviews each PR automatically. For an on-demand review or a question, write `@claude` in a PR or issue comment. Act on valid findings, then merge with `gh pr merge <n> --merge --delete-branch`.
+
+Also:
+
 - No confirmation is needed in this repo to commit, push, open or merge your own PRs. Force-push and history rewrites still need explicit approval.
 - Gotchas for the review workflow:
   - It does not review PRs that change `.github/workflows/claude*.yml`, because the action only runs when the workflow file matches `master`.
