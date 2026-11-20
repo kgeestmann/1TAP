@@ -55,10 +55,25 @@ def format_delta(delta: timedelta) -> str:
     return " ".join(parts) or "0s"
 
 
-def describe_unmute_failure(error: discord.HTTPException) -> str:
+def describe_api_error(error: discord.HTTPException, permission_hint: str) -> str:
     if isinstance(error, discord.Forbidden):
-        return "missing permissions — the muted role is above my top role or I lack Manage Roles"
+        return f"missing permissions — {permission_hint}"
     return f"Discord API error ({error.status})"
+
+
+def describe_unmute_failure(error: discord.HTTPException) -> str:
+    return describe_api_error(error, "the muted role is above my top role or I lack Manage Roles")
+
+
+def describe_timeout_failure(error: discord.HTTPException) -> str:
+    return describe_api_error(error, "I need Moderate Members and a role above theirs")
+
+
+def partial_unmute_message(target, cleared: list[str], failures: list[str]) -> str:
+    text = f"Couldn't fully unmute {user_label(target)}: {'; '.join(failures)}."
+    if cleared:
+        text += f" Cleared: {', '.join(cleared)}."
+    return text
 
 
 def audit_reason(moderator, reason) -> str:
@@ -212,23 +227,30 @@ class Moderation(commands.Cog):
         if error:
             return None, error
         cfg = await repository.get_config(guild.id)
-        actions = []
+        audit = audit_reason(moderator, reason)
+        cleared, failures = [], []
         if target.is_timed_out():
             try:
-                await target.timeout(None, reason=audit_reason(moderator, reason))
-                actions.append("timeout")
-            except discord.HTTPException:
-                pass
+                await target.timeout(None, reason=audit)
+                cleared.append("timeout")
+            except discord.HTTPException as exc:
+                failures.append(f"couldn't clear the timeout ({describe_timeout_failure(exc)})")
         role = guild.get_role(cfg.muted_role_id) if cfg.muted_role_id else None
+        role_still_assigned = False
         if role and role in target.roles:
             try:
-                await target.remove_roles(role, reason=audit_reason(moderator, reason))
-                actions.append("muted role")
-            except discord.HTTPException:
-                pass
-        if self.scheduler:  # cancel any pending auto-unmute
+                await target.remove_roles(role, reason=audit)
+                cleared.append("muted role")
+            except discord.HTTPException as exc:
+                role_still_assigned = True
+                failures.append(f"couldn't remove the muted role ({describe_unmute_failure(exc)})")
+        # While the role is still on, keep any pending auto-unmute: it retries
+        # and alerts the mod-log if it keeps failing.
+        if self.scheduler and not role_still_assigned:
             await self.scheduler.cancel_timer(UNMUTE_EVENT, guild_id=guild.id, user_id=target.id)
-        if not actions:
+        if failures:
+            return None, partial_unmute_message(target, cleared, failures)
+        if not cleared:
             return None, f"{user_label(target)} doesn't appear to be muted."
         await repository.add_log(guild.id, "unmute", target, moderator, reason)
         await self._log_to_channel(

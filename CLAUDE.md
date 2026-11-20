@@ -33,7 +33,8 @@ The full picture is in `docs/architecture.md`. These are the parts that take sev
 ## Tests
 
 - `tests/` uses pytest with `asyncio_mode = auto`, so async tests need no markers.
-- Tests are pure unit tests: no Discord connection and no database. Build the cog with a `MagicMock` bot, `monkeypatch` the `repository` functions, and use `AsyncMock` for awaited Discord calls. `tests/test_auto_unmute.py` is the reference.
+- Tests are pure unit tests: no Discord connection and no database. Build the cog with a `MagicMock` bot, `monkeypatch` the `repository` functions, and use `AsyncMock` for awaited Discord calls.
+- Shared fixtures for the Moderation cog (a guild with one muted member, a mocked scheduler) live in `tests/conftest.py`; IDs and `make_http_error` live in `tests/helpers.py`. `tests/test_auto_unmute.py` and `tests/test_manual_unmute.py` are the reference.
 - A bug fix comes with a test that fails on the old code.
 
 ## Keeping docs in sync
