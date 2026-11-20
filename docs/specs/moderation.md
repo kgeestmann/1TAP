@@ -105,9 +105,15 @@ are expired via the **[Scheduler](scheduler.md)**, not a poll loop:
 
 ## Unmute
 
-`unmute` is strategy-agnostic and best-effort: it clears an active timeout **and**
-removes the muted role if present. If the member is neither timed out nor holds
-the role, it reports that nothing was done.
+`unmute` is strategy-agnostic: it clears an active timeout **and** removes the
+muted role if present. If the member is neither timed out nor holds the role, it
+reports that nothing was done.
+
+If a step fails (e.g. the muted role is above the bot's role), the moderator gets
+an error naming each failure and its cause, plus whatever *was* cleared. Nothing
+is logged as an unmute in that case. A pending auto-unmute timer is cancelled
+only once the muted role is actually off; while it is still assigned the timer
+stays as a fallback (it retries and alerts the mod-log, see *Auto-unmute*).
 
 ## Messages
 
