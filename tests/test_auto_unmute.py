@@ -131,8 +131,58 @@ async def test_last_attempt_alerts_mod_log_instead_of_retrying(cog, member, sche
 
     scheduler.create_timer.assert_not_awaited()
     moderation.repository.add_log.assert_not_awaited()
-    assert logged_action(cog) == "Auto-unmute failed"
-    embed = cog._log_to_channel.await_args.args[1]
-    reason = next(field.value for field in embed.fields if field.name == "Reason")
+    reason = alert_reason(cog)
     assert "missing permissions" in reason
     assert "manually" in reason
+
+
+def alert_reason(cog):
+    assert logged_action(cog) == "Auto-unmute failed"
+    embed = cog._log_to_channel.await_args.args[1]
+    return next(field.value for field in embed.fields if field.name == "Reason")
+
+
+async def test_muted_role_deleted_does_nothing(cog, guild, member):
+    guild.get_role.side_effect = None
+    guild.get_role.return_value = None
+
+    await cog.on_unmute_timer_complete(make_timer())
+
+    member.remove_roles.assert_not_awaited()
+    cog._log_to_channel.assert_not_awaited()
+
+
+async def test_not_found_is_treated_as_already_unmuted(cog, member, scheduler):
+    member.remove_roles.side_effect = make_http_error(discord.NotFound, 404)
+
+    await cog.on_unmute_timer_complete(make_timer())
+
+    scheduler.create_timer.assert_not_awaited()
+    moderation.repository.add_log.assert_not_awaited()
+    cog._log_to_channel.assert_not_awaited()
+
+
+async def test_alert_names_api_status_for_non_permission_errors(cog, member):
+    member.remove_roles.side_effect = make_http_error(discord.HTTPException, 503)
+
+    await cog.on_unmute_timer_complete(make_timer(attempt=UNMUTE_MAX_ATTEMPTS))
+
+    assert "Discord API error (503)" in alert_reason(cog)
+
+
+async def test_alerts_when_retry_cannot_be_scheduled(cog, member, scheduler):
+    member.remove_roles.side_effect = make_http_error(discord.HTTPException, 500)
+    scheduler.create_timer.side_effect = RuntimeError("database is locked")
+
+    await cog.on_unmute_timer_complete(make_timer())
+
+    assert "manually" in alert_reason(cog)
+
+
+async def test_alerts_when_scheduler_is_not_loaded(cog, member):
+    cog.bot.get_cog.return_value = None
+    member.remove_roles.side_effect = make_http_error(discord.HTTPException, 500)
+
+    await cog.on_unmute_timer_complete(make_timer())
+
+    assert "manually" in alert_reason(cog)
