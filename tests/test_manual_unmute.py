@@ -1,4 +1,3 @@
-"""Manual /unmute and !unmute: Moderation._apply_unmute."""
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
@@ -44,7 +43,7 @@ async def test_role_removal_failure_is_reported_and_keeps_timer(cog, guild, memb
     assert "couldn't remove the muted role" in error
     assert "missing permissions" in error
     assert "doesn't appear to be muted" not in error
-    scheduler.cancel_timer.assert_not_awaited()  # pending auto-unmute stays as a fallback
+    scheduler.cancel_timer.assert_not_awaited()
     moderation.repository.add_log.assert_not_awaited()
     cog._log_to_channel.assert_not_awaited()
 
@@ -58,7 +57,7 @@ async def test_timeout_failure_is_reported_alongside_what_was_cleared(cog, guild
     assert message is None
     assert "couldn't clear the timeout (Discord API error (500))" in error
     assert "Cleared: muted role" in error
-    assert_timer_cancelled(scheduler)  # role is off, so the auto-unmute is obsolete
+    assert_timer_cancelled(scheduler)
     moderation.repository.add_log.assert_not_awaited()
 
 

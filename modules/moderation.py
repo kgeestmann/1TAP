@@ -16,8 +16,6 @@ _UNIT_NAMES = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days"}
 MAX_TIMEOUT = timedelta(days=28)
 DEFAULT_TIMEOUT = timedelta(hours=1)
 UNMUTE_EVENT = "unmute"  # scheduler event name for timed role-mute expiry
-# The scheduler fires each timer at most once, so a failed auto-unmute is
-# retried by scheduling a fresh timer; after the last attempt a human is told.
 UNMUTE_MAX_ATTEMPTS = 3
 UNMUTE_RETRY_DELAY = timedelta(minutes=10)
 
@@ -244,8 +242,6 @@ class Moderation(commands.Cog):
             except discord.HTTPException as exc:
                 role_still_assigned = True
                 failures.append(f"couldn't remove the muted role ({describe_unmute_failure(exc)})")
-        # While the role is still on, keep any pending auto-unmute: it retries
-        # and alerts the mod-log if it keeps failing.
         if self.scheduler and not role_still_assigned:
             await self.scheduler.cancel_timer(UNMUTE_EVENT, guild_id=guild.id, user_id=target.id)
         if failures:
@@ -267,7 +263,7 @@ class Moderation(commands.Cog):
             return
         member = guild.get_member(data["user_id"])
         if member is None:
-            return  # left the server; Discord drops their roles anyway
+            return
         role = guild.get_role(data["role_id"])
         if role is None or role not in member.roles:
             logger.info("Auto-unmute for %s in guild %s: muted role already gone, nothing to do",
@@ -288,7 +284,6 @@ class Moderation(commands.Cog):
         )
 
     async def _handle_unmute_failure(self, guild, member, payload, error):
-        """Retry a failed auto-unmute later, or alert the mod-log once out of attempts."""
         attempt = payload.get("attempt", 1)
         cause = describe_unmute_failure(error)
         if attempt < UNMUTE_MAX_ATTEMPTS and await self._schedule_unmute_retry(guild, member, payload, attempt):
@@ -304,7 +299,6 @@ class Moderation(commands.Cog):
         )
 
     async def _schedule_unmute_retry(self, guild, member, payload, attempt) -> bool:
-        """Schedule the next auto-unmute attempt; False if it couldn't be scheduled."""
         if not self.scheduler:
             return False
         try:
@@ -315,8 +309,6 @@ class Moderation(commands.Cog):
                 guild_id=guild.id,
             )
         except Exception:
-            # The original timer is already gone, so falling back to the
-            # mod-log alert is the only way left to surface this.
             logger.exception("Could not schedule auto-unmute retry for %s in guild %s",
                              member.id, guild.id)
             return False

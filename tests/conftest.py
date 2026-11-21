@@ -1,4 +1,3 @@
-"""Fixtures for Moderation cog tests: a guild with one muted member, no Discord or DB."""
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
