@@ -1,4 +1,3 @@
-"""Shared test constants and factories (fixtures live in conftest.py)."""
 from unittest.mock import MagicMock
 
 GUILD_ID, USER_ID, ROLE_ID = 1, 2, 3

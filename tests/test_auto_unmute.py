@@ -1,4 +1,3 @@
-"""Auto-unmute handler: fired by the scheduler when a timed role-mute expires."""
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -16,7 +15,6 @@ def make_timer(**extra):
 
 
 def logged_action(cog):
-    """Title of the single embed posted to the mod-log channel."""
     cog._log_to_channel.assert_awaited_once()
     embed = cog._log_to_channel.await_args.args[1]
     return embed.title
