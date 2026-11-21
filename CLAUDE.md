@@ -65,7 +65,7 @@ Every change (feature, fix or docs) starts from a GitHub issue and gets its own 
    ```
    This links the branch under the issue's *Development* section. `<type>` is the Conventional Commit type (`feat`, `fix`, `docs`, …). Never commit directly to `master`.
 3. **Commit** using Conventional Commits.
-4. **Before the PR:** run `pytest`.
+4. **Before the PR:** run `pytest`. The `Tests` workflow (`.github/workflows/tests.yml`) also runs it on every PR and on pushes to `master`. Don't merge while it is red.
 5. **PR:** put `Closes #<n>` in the description so the merge closes the issue and links it to the PR.
 6. **Review and merge:** the `claude-code-review` workflow reviews each PR automatically. For an on-demand review or a question, write `@claude` in a PR or issue comment. Act on valid findings, then merge with `gh pr merge <n> --merge --delete-branch`.
 

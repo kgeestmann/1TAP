@@ -77,7 +77,7 @@ Full documentation lives in [`docs/`](docs/README.md). Start with the
 
 ## Development
 
-- **Run the tests:** `pytest` (installed via `requirements.txt`).
+- **Run the tests:** `pytest` (installed via `requirements.txt`). CI runs the suite on every pull request (`.github/workflows/tests.yml`).
 - **Add a migration:** `alembic revision --autogenerate -m "describe change"`,
   then `alembic upgrade head` (or just restart the bot).
 - **Run against a scratch database:** set `DATABASE_PATH` to a temp file.
