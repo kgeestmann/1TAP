@@ -18,6 +18,10 @@ alembic upgrade head
 
 No linter or formatter is configured. Match the surrounding style.
 
+## Code comments
+
+Don't add comments or docstrings to new or changed code. Explanations go into the PR description or the commit message. Never describe the old or broken behaviour in the code. Leave existing comments alone unless the code they describe changes.
+
 ## Architecture
 
 The full picture is in `docs/architecture.md`. These are the parts that take several files to piece together:
